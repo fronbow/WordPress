@@ -138,15 +138,23 @@ setCommentsList = function() {
 	};
 
 	updateHtmlTitle = function ( diff ) {
-		var newTitle, regExMatch, titleCount;
+		var newTitle, regExMatch, titleCount, commentFrag;
 
 		titleRegEx = titleRegEx || new RegExp( 'Comments (\\([0-9' + thousandsSeparator + ']+\\))?' );
 		// count funcs operate on a $'d element
 		titleDiv = titleDiv || $( '<div />' );
 		newTitle = adminTitle;
 
-		titleDiv.html( document.title );
-		titleCount = getCount( titleDiv ) + diff;
+		commentFrag = titleRegEx.exec( document.title );
+		if ( commentFrag ) {
+			commentFrag = commentFrag[0];
+			titleDiv.html( commentFrag );
+			titleCount = getCount( titleDiv ) + diff;
+		} else {
+			titleDiv.html( 0 );
+			titleCount = diff;
+		}
+
 		if ( titleCount >= 1 ) {
 			updateCount( titleDiv, titleCount );
 			regExMatch = titleRegEx.exec( document.title );
@@ -532,7 +540,7 @@ commentReply = {
 
 		$('a.cancel', row).click(function() { return commentReply.revert(); });
 		$('a.save', row).click(function() { return commentReply.send(); });
-		$('input#author, input#author-email, input#author-url', row).keypress(function(e){
+		$( 'input#author-name, input#author-email, input#author-url', row ).keypress( function( e ) {
 			if ( e.which == 13 ) {
 				commentReply.send();
 				e.preventDefault();
@@ -615,7 +623,8 @@ commentReply = {
 		var editRow, rowData, act, replyButton, editHeight,
 			t = this,
 			c = $('#comment-' + comment_id),
-			h = c.height();
+			h = c.height(),
+			colspanVal = 0;
 
 		t.close();
 		t.cid = comment_id;
@@ -625,13 +634,19 @@ commentReply = {
 		action = action || 'replyto';
 		act = 'edit' == action ? 'edit' : 'replyto';
 		act = t.act = act + '-comment';
+		colspanVal = $( 'th:visible, td:visible', c ).length;
+
+		// Make sure it's actually a table and there's a `colspan` value to apply.
+		if ( editRow.hasClass( 'inline-edit-row' ) && 0 !== colspanVal ) {
+			$( 'td', editRow ).attr( 'colspan', colspanVal );
+		}
 
 		$('#action', editRow).val(act);
 		$('#comment_post_ID', editRow).val(post_id);
 		$('#comment_ID', editRow).val(comment_id);
 
 		if ( action == 'edit' ) {
-			$('#author', editRow).val( $('div.author', rowData).text() );
+			$( '#author-name', editRow ).val( $( 'div.author', rowData ).text() );
 			$('#author-email', editRow).val( $('div.author-email', rowData).text() );
 			$('#author-url', editRow).val( $('div.author-url', rowData).text() );
 			$('#status', editRow).val( $('div.comment_status', rowData).text() );

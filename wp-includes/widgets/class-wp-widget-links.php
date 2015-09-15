@@ -29,24 +29,34 @@ class WP_Widget_Links extends WP_Widget {
 
 		$before_widget = preg_replace( '/id="[^"]*"/', 'id="%id"', $args['before_widget'] );
 
+		$widget_links_args = array(
+			'title_before'     => $args['before_title'],
+			'title_after'      => $args['after_title'],
+			'category_before'  => $before_widget,
+			'category_after'   => $args['after_widget'],
+			'show_images'      => $show_images,
+			'show_description' => $show_description,
+			'show_name'        => $show_name,
+			'show_rating'      => $show_rating,
+			'category'         => $category,
+			'class'            => 'linkcat widget',
+			'orderby'          => $orderby,
+			'order'            => $order,
+			'limit'            => $limit,
+		);
+
 		/**
 		 * Filter the arguments for the Links widget.
 		 *
 		 * @since 2.6.0
+		 * @since 4.4.0 The `$instance` parameter was added.
 		 *
 		 * @see wp_list_bookmarks()
 		 *
-		 * @param array $args An array of arguments to retrieve the links list.
+		 * @param array $widget_links_args An array of arguments to retrieve the links list.
+		 * @param array $instance          The settings for the particular instance of the widget.
 		 */
-		wp_list_bookmarks( apply_filters( 'widget_links_args', array(
-			'title_before' => $args['before_title'], 'title_after' => $args['after_title'],
-			'category_before' => $before_widget, 'category_after' => $args['after_widget'],
-			'show_images' => $show_images, 'show_description' => $show_description,
-			'show_name' => $show_name, 'show_rating' => $show_rating,
-			'category' => $category, 'class' => 'linkcat widget',
-			'orderby' => $orderby, 'order' => $order,
-			'limit' => $limit,
-		) ) );
+		wp_list_bookmarks( apply_filters( 'widget_links_args', $widget_links_args, $instance ) );
 	}
 
 	/**
@@ -104,13 +114,13 @@ class WP_Widget_Links extends WP_Widget {
 		</select>
 		</p>
 		<p>
-		<input class="checkbox" type="checkbox" <?php checked($instance['images'], true) ?> id="<?php echo $this->get_field_id('images'); ?>" name="<?php echo $this->get_field_name('images'); ?>" />
+		<input class="checkbox" type="checkbox"<?php checked($instance['images'], true) ?> id="<?php echo $this->get_field_id('images'); ?>" name="<?php echo $this->get_field_name('images'); ?>" />
 		<label for="<?php echo $this->get_field_id('images'); ?>"><?php _e('Show Link Image'); ?></label><br />
-		<input class="checkbox" type="checkbox" <?php checked($instance['name'], true) ?> id="<?php echo $this->get_field_id('name'); ?>" name="<?php echo $this->get_field_name('name'); ?>" />
+		<input class="checkbox" type="checkbox"<?php checked($instance['name'], true) ?> id="<?php echo $this->get_field_id('name'); ?>" name="<?php echo $this->get_field_name('name'); ?>" />
 		<label for="<?php echo $this->get_field_id('name'); ?>"><?php _e('Show Link Name'); ?></label><br />
-		<input class="checkbox" type="checkbox" <?php checked($instance['description'], true) ?> id="<?php echo $this->get_field_id('description'); ?>" name="<?php echo $this->get_field_name('description'); ?>" />
+		<input class="checkbox" type="checkbox"<?php checked($instance['description'], true) ?> id="<?php echo $this->get_field_id('description'); ?>" name="<?php echo $this->get_field_name('description'); ?>" />
 		<label for="<?php echo $this->get_field_id('description'); ?>"><?php _e('Show Link Description'); ?></label><br />
-		<input class="checkbox" type="checkbox" <?php checked($instance['rating'], true) ?> id="<?php echo $this->get_field_id('rating'); ?>" name="<?php echo $this->get_field_name('rating'); ?>" />
+		<input class="checkbox" type="checkbox"<?php checked($instance['rating'], true) ?> id="<?php echo $this->get_field_id('rating'); ?>" name="<?php echo $this->get_field_name('rating'); ?>" />
 		<label for="<?php echo $this->get_field_id('rating'); ?>"><?php _e('Show Link Rating'); ?></label>
 		</p>
 		<p>

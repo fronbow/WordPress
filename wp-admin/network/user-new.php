@@ -30,7 +30,7 @@ get_current_screen()->set_help_sidebar(
 	'<p>' . __('<a href="https://wordpress.org/support/forum/multisite/" target="_blank">Support Forums</a>') . '</p>'
 );
 
-if ( isset($_REQUEST['action']) && 'add-user' == $_REQUEST['action'] ) {
+if ( wp_validate_action( 'add-user' ) ) {
 	check_admin_referer( 'add-user', '_wpnonce_add-user' );
 
 	if ( ! current_user_can( 'manage_network_users' ) )
@@ -51,7 +51,7 @@ if ( isset($_REQUEST['action']) && 'add-user' == $_REQUEST['action'] ) {
 		if ( ! $user_id ) {
 	 		$add_user_errors = new WP_Error( 'add_user_fail', __( 'Cannot add user.' ) );
 		} else {
-			wp_new_user_notification( $user_id, 'both' );
+			wp_new_user_notification( $user_id, null, 'both' );
 			wp_redirect( add_query_arg( array('update' => 'added'), 'user-new.php' ) );
 			exit;
 		}

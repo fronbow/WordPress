@@ -92,7 +92,9 @@ class WP_Comment_Query {
 	 *
 	 * Sets up the comment query, based on the query vars passed.
 	 *
-	 * @since  4.2.0
+	 * @since 4.2.0
+	 * @since 4.4.0 `$parent__in` and `$parent__not_in` were added.
+	 * @since 4.4.0 Order by `comment__in` was added.
 	 * @access public
 	 *
 	 * @param string|array $query {
@@ -129,13 +131,15 @@ class WP_Comment_Query {
 	 *                                             'comment_author_url', 'comment_content', 'comment_date',
 	 *                                             'comment_date_gmt', 'comment_ID', 'comment_karma',
 	 *                                             'comment_parent', 'comment_post_ID', 'comment_type', 'user_id',
-	 *                                             'meta_value', 'meta_value_num', the value of $meta_key, and the
+	 *                                             'comment__in', 'meta_value', 'meta_value_num', the value of $meta_key, and the
 	 *                                             array keys of `$meta_query`. Also accepts false, an empty array,
 	 *                                             or 'none' to disable `ORDER BY` clause.
 	 *                                             Default: 'comment_date_gmt'.
 	 *     @type string       $order               How to order retrieved comments. Accepts 'ASC', 'DESC'.
 	 *                                             Default: 'DESC'.
 	 *     @type int          $parent              Parent ID of comment to retrieve children of. Default empty.
+	 *     @type array        $parent__in          Array of parent IDs of comments to retrieve children for. Default empty.
+	 *     @type array        $parent__not_in      Array of parent IDs of comments *not* to retrieve children for. Default empty.
 	 *     @type array        $post_author__in     Array of author IDs to retrieve comments for. Default empty.
 	 *     @type array        $post_author__not_in Array of author IDs *not* to retrieve comments for. Default empty.
 	 *     @type int          $post_ID             Currently unused.
@@ -387,13 +391,18 @@ class WP_Comment_Query {
 					$_order = $_value;
 				}
 
-				if ( ! $found_orderby_comment_ID && 'comment_ID' === $_orderby ) {
+				if ( ! $found_orderby_comment_ID && in_array( $_orderby, array( 'comment_ID', 'comment__in' ) ) ) {
 					$found_orderby_comment_ID = true;
 				}
 
 				$parsed = $this->parse_orderby( $_orderby );
 
 				if ( ! $parsed ) {
+					continue;
+				}
+
+				if ( 'comment__in' === $_orderby ) {
+					$orderby_array[] = $parsed;
 					continue;
 				}
 
@@ -484,6 +493,16 @@ class WP_Comment_Query {
 		// Parse comment IDs for a NOT IN clause.
 		if ( ! empty( $this->query_vars['comment__not_in'] ) ) {
 			$where[] = "$wpdb->comments.comment_ID NOT IN ( " . implode( ',', wp_parse_id_list( $this->query_vars['comment__not_in'] ) ) . ' )';
+		}
+
+		// Parse comment parent IDs for an IN clause.
+		if ( ! empty( $this->query_vars['parent__in'] ) ) {
+			$where[] = 'comment_parent IN ( ' . implode( ',', wp_parse_id_list( $this->query_vars['parent__in'] ) ) . ' )';
+		}
+
+		// Parse comment parent IDs for a NOT IN clause.
+		if ( ! empty( $this->query_vars['parent__not_in'] ) ) {
+			$where[] = 'comment_parent NOT IN ( ' . implode( ',', wp_parse_id_list( $this->query_vars['parent__not_in'] ) ) . ' )';
 		}
 
 		// Parse comment post IDs for an IN clause.
@@ -759,6 +778,9 @@ class WP_Comment_Query {
 			$parsed = "$wpdb->commentmeta.meta_value";
 		} elseif ( $orderby == 'meta_value_num' ) {
 			$parsed = "$wpdb->commentmeta.meta_value+0";
+		} elseif ( $orderby == 'comment__in' ) {
+			$comment__in = implode( ',', array_map( 'absint', $this->query_vars['comment__in'] ) );
+			$parsed = "FIELD( {$wpdb->comments}.comment_ID, $comment__in )";
 		} elseif ( in_array( $orderby, $allowed_keys ) ) {
 
 			if ( isset( $meta_query_clauses[ $orderby ] ) ) {

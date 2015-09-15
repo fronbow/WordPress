@@ -371,7 +371,8 @@ function _wp_ajax_delete_comment_response( $comment_id, $delta = -1 ) {
 	// Only do the expensive stuff on a page-break, and about 1 other time per page
 	if ( 0 == $total % $per_page || 1 == mt_rand( 1, $per_page ) ) {
 		$post_id = 0;
-		$status = 'total_comments'; // What type of comment count are we looking for?
+		// What type of comment count are we looking for?
+		$status = 'all';
 		$parsed = parse_url( $url );
 		if ( isset( $parsed['query'] ) ) {
 			parse_str( $parsed['query'], $query_vars );
@@ -520,31 +521,31 @@ function wp_ajax_delete_comment() {
 		wp_die( -1 );
 
 	check_ajax_referer( "delete-comment_$id" );
-	$status = wp_get_comment_status( $comment->comment_ID );
+	$status = wp_get_comment_status( $comment );
 
 	$delta = -1;
 	if ( isset($_POST['trash']) && 1 == $_POST['trash'] ) {
 		if ( 'trash' == $status )
 			wp_die( time() );
-		$r = wp_trash_comment( $comment->comment_ID );
+		$r = wp_trash_comment( $comment );
 	} elseif ( isset($_POST['untrash']) && 1 == $_POST['untrash'] ) {
 		if ( 'trash' != $status )
 			wp_die( time() );
-		$r = wp_untrash_comment( $comment->comment_ID );
+		$r = wp_untrash_comment( $comment );
 		if ( ! isset( $_POST['comment_status'] ) || $_POST['comment_status'] != 'trash' ) // undo trash, not in trash
 			$delta = 1;
 	} elseif ( isset($_POST['spam']) && 1 == $_POST['spam'] ) {
 		if ( 'spam' == $status )
 			wp_die( time() );
-		$r = wp_spam_comment( $comment->comment_ID );
+		$r = wp_spam_comment( $comment );
 	} elseif ( isset($_POST['unspam']) && 1 == $_POST['unspam'] ) {
 		if ( 'spam' != $status )
 			wp_die( time() );
-		$r = wp_unspam_comment( $comment->comment_ID );
+		$r = wp_unspam_comment( $comment );
 		if ( ! isset( $_POST['comment_status'] ) || $_POST['comment_status'] != 'spam' ) // undo spam, not in spam
 			$delta = 1;
 	} elseif ( isset($_POST['delete']) && 1 == $_POST['delete'] ) {
-		$r = wp_delete_comment( $comment->comment_ID );
+		$r = wp_delete_comment( $comment );
 	} else {
 		wp_die( -1 );
 	}
@@ -730,15 +731,16 @@ function wp_ajax_dim_comment() {
 	if ( ! current_user_can( 'edit_comment', $comment->comment_ID ) && ! current_user_can( 'moderate_comments' ) )
 		wp_die( -1 );
 
-	$current = wp_get_comment_status( $comment->comment_ID );
+	$current = wp_get_comment_status( $comment );
 	if ( isset( $_POST['new'] ) && $_POST['new'] == $current )
 		wp_die( time() );
 
 	check_ajax_referer( "approve-comment_$id" );
-	if ( in_array( $current, array( 'unapproved', 'spam' ) ) )
-		$result = wp_set_comment_status( $comment->comment_ID, 'approve', true );
-	else
-		$result = wp_set_comment_status( $comment->comment_ID, 'hold', true );
+	if ( in_array( $current, array( 'unapproved', 'spam' ) ) ) {
+		$result = wp_set_comment_status( $comment, 'approve', true );
+	} else {
+		$result = wp_set_comment_status( $comment, 'hold', true );
+	}
 
 	if ( is_wp_error($result) ) {
 		$x = new WP_Ajax_Response( array(
@@ -1011,7 +1013,11 @@ function wp_ajax_replyto_comment( $action ) {
 		$parent = get_comment( $comment_parent );
 
 		if ( $parent && $parent->comment_approved === '0' && $parent->comment_post_ID == $comment_post_ID ) {
-			if ( wp_set_comment_status( $parent->comment_ID, 'approve' ) )
+			if ( ! current_user_can( 'edit_comment', $parent->comment_ID ) ) {
+				wp_die( -1 );
+			}
+
+			if ( wp_set_comment_status( $parent, 'approve' ) )
 				$comment_auto_approved = true;
 		}
 	}
@@ -1521,7 +1527,7 @@ function wp_ajax_menu_quick_search() {
 function wp_ajax_get_permalink() {
 	check_ajax_referer( 'getpermalink', 'getpermalinknonce' );
 	$post_id = isset($_POST['post_id'])? intval($_POST['post_id']) : 0;
-	wp_die( add_query_arg( array( 'preview' => 'true' ), get_permalink( $post_id ) ) );
+	wp_die( get_preview_post_link( $post_id ) );
 }
 
 /**
@@ -3149,7 +3155,7 @@ function wp_ajax_crop_image() {
 			/** This filter is documented in wp-admin/custom-header.php */
 			$cropped = apply_filters( 'wp_create_file_in_uploads', $cropped, $attachment_id ); // For replication.
 
-			$parent_url = get_post( $attachment_id )->guid;
+			$parent_url = wp_get_attachment_url( $attachment_id );
 			$url        = str_replace( basename( $parent_url ), basename( $cropped ), $parent_url );
 
 			$size       = @getimagesize( $cropped );

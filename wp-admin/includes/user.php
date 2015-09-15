@@ -176,7 +176,7 @@ function edit_user( $user_id = 0 ) {
 		$user_id = wp_update_user( $user );
 	} else {
 		$user_id = wp_insert_user( $user );
-		wp_new_user_notification( $user_id, 'both' );
+		wp_new_user_notification( $user_id, null, 'both' );
 	}
 	return $user_id;
 }
@@ -272,6 +272,10 @@ function get_users_drafts( $user_id ) {
  */
 function wp_delete_user( $id, $reassign = null ) {
 	global $wpdb;
+
+	if ( ! is_numeric( $id ) ) {
+		return false;
+	}
 
 	$id = (int) $id;
 	$user = new WP_User( $id );
@@ -445,4 +449,58 @@ function default_password_nag() {
 	printf( '<a href="%s">' . __('Yes, take me to my profile page') . '</a> | ', get_edit_profile_url() . '#password' );
 	printf( '<a href="%s" id="default-password-nag-no">' . __('No thanks, do not remind me again') . '</a>', '?default_password_nag=0' );
 	echo '</p></div>';
+}
+
+/**
+ * @since 3.5.0
+ * @access private
+ */
+function delete_users_add_js() { ?>
+<script>
+jQuery(document).ready( function($) {
+	var submit = $('#submit').prop('disabled', true);
+	$('input[name="delete_option"]').one('change', function() {
+		submit.prop('disabled', false);
+	});
+	$('#reassign_user').focus( function() {
+		$('#delete_option1').prop('checked', true).trigger('change');
+	});
+});
+</script>
+<?php
+}
+
+/**
+ * Optional SSL preference that can be turned on by hooking to the 'personal_options' action.
+ *
+ * @since 2.7.0
+ *
+ * @param object $user User data object
+ */
+function use_ssl_preference($user) {
+?>
+	<tr class="user-use-ssl-wrap">
+		<th scope="row"><?php _e('Use https')?></th>
+		<td><label for="use_ssl"><input name="use_ssl" type="checkbox" id="use_ssl" value="1" <?php checked('1', $user->use_ssl); ?> /> <?php _e('Always use https when visiting the admin'); ?></label></td>
+	</tr>
+<?php
+}
+
+/**
+ *
+ * @param string $text
+ * @return string
+ */
+function admin_created_user_email( $text ) {
+	$roles = get_editable_roles();
+	$role = $roles[ $_REQUEST['role'] ];
+	/* translators: 1: Site name, 2: site URL, 3: role */
+	return sprintf( __( 'Hi,
+You\'ve been invited to join \'%1$s\' at
+%2$s with the role of %3$s.
+If you do not want to join this site please ignore
+this email. This invitation will expire in a few days.
+
+Please click the following link to activate your user account:
+%%s' ), get_bloginfo( 'name' ), home_url(), wp_specialchars_decode( translate_user_role( $role['name'] ) ) );
 }

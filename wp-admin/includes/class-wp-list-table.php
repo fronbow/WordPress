@@ -528,10 +528,18 @@ class WP_List_Table {
 			return;
 		}
 
+		$extra_checks = "AND post_status != 'auto-draft'";
+		if ( ! isset( $_GET['post_status'] ) || 'trash' !== $_GET['post_status'] ) {
+			$extra_checks .= " AND post_status != 'trash'";
+		} elseif ( isset( $_GET['post_status'] ) ) {
+			$extra_checks = $wpdb->prepare( ' AND post_status = %s', $_GET['post_status'] );
+		}
+
 		$months = $wpdb->get_results( $wpdb->prepare( "
 			SELECT DISTINCT YEAR( post_date ) AS year, MONTH( post_date ) AS month
 			FROM $wpdb->posts
 			WHERE post_type = %s
+			$extra_checks
 			ORDER BY post_date DESC
 		", $post_type ) );
 
@@ -881,6 +889,18 @@ class WP_List_Table {
 	}
 
 	/**
+	 * Public wrapper for `->get_default_primary_column_name()`
+	 *
+	 * @since 4.4.0
+	 * @access public
+	 *
+	 * @return string Name of the default primary column.
+	 */
+	public function get_primary_column() {
+		return $this->get_primary_column_name();
+	}
+
+	/**
 	 * Gets the name of the primary column.
 	 *
 	 * @since 4.3.0
@@ -1118,7 +1138,8 @@ class WP_List_Table {
 	protected function display_tablenav( $which ) {
 		if ( 'top' == $which )
 			wp_nonce_field( 'bulk-' . $this->_args['plural'] );
-?>
+
+		if ( $this->has_items() ) : ?>
 	<div class="tablenav <?php echo esc_attr( $which ); ?>">
 
 		<div class="alignleft actions bulkactions">
@@ -1132,6 +1153,7 @@ class WP_List_Table {
 		<br class="clear" />
 	</div>
 <?php
+		endif;
 	}
 
 	/**

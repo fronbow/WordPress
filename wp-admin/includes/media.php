@@ -805,7 +805,9 @@ function wp_media_upload_handler() {
 
 	if ( isset( $_POST['save'] ) ) {
 		$errors['upload_notice'] = __('Saved.');
-		return media_upload_gallery();
+		wp_enqueue_script( 'admin-gallery' );
+ 		return wp_iframe( 'media_upload_gallery_form', $errors );
+
 	} elseif ( ! empty( $_POST ) ) {
 		$return = media_upload_form_handler();
 
@@ -1366,7 +1368,8 @@ function get_media_item( $attachment_id, $args = null ) {
 	$toggle_on  = __( 'Show' );
 	$toggle_off = __( 'Hide' );
 
-	$filename = esc_html( wp_basename( $post->guid ) );
+	$file = get_attached_file( $post->ID );
+	$filename = esc_html( wp_basename( $file ) );
 	$title = esc_attr( $post->post_title );
 
 	$post_mime_types = get_post_mime_types();
@@ -2784,7 +2787,8 @@ function edit_form_image_editor( $post ) {
 function attachment_submitbox_metadata() {
 	$post = get_post();
 
-	$filename = esc_html( wp_basename( $post->guid ) );
+	$file = get_attached_file( $post->ID );
+	$filename = esc_html( wp_basename( $file ) );
 
 	$media_dims = '';
 	$meta = wp_get_attachment_metadata( $post->ID );
@@ -2819,7 +2823,6 @@ function attachment_submitbox_metadata() {
 	</div>
 
 	<?php
-		$file  = get_attached_file( $post->ID );
 		$file_size = false;
 
 		if ( isset( $meta['filesize'] ) )

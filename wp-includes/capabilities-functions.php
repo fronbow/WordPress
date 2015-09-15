@@ -37,21 +37,36 @@ function map_meta_cap( $cap, $user_id ) {
 		if ( 'edit_user' == $cap && isset( $args[0] ) && $user_id == $args[0] )
 			break;
 
-		// If multisite these caps are allowed only for super admins.
-		if ( is_multisite() && !is_super_admin( $user_id ) )
+		// In multisite the user must have manage_network_users caps. If editing a super admin, the user must be a super admin.
+		if ( is_multisite() && ( ( ! is_super_admin( $user_id ) && 'edit_user' === $cap && is_super_admin( $args[0] ) ) || ! user_can( $user_id, 'manage_network_users' ) ) ) {
 			$caps[] = 'do_not_allow';
-		else
+		} else {
 			$caps[] = 'edit_users'; // edit_user maps to edit_users.
+		}
 		break;
 	case 'delete_post':
 	case 'delete_page':
 		$post = get_post( $args[0] );
+		if ( ! $post ) {
+			$caps[] = 'do_not_allow';
+			break;
+		}
 
 		if ( 'revision' == $post->post_type ) {
 			$post = get_post( $post->post_parent );
+			if ( ! $post ) {
+				$caps[] = 'do_not_allow';
+				break;
+			}
 		}
 
 		$post_type = get_post_type_object( $post->post_type );
+		if ( ! $post_type ) {
+			/* translators: 1: post type, 2: capability name */
+			_doing_it_wrong( __FUNCTION__, sprintf( __( 'The post type %1$s is not registered, so it may not be reliable to check the capability "%2$s" against a post of that type.' ), $post->post_type, $cap ), '4.4.0' );
+			$caps[] = 'edit_others_posts';
+			break;
+		}
 
 		if ( ! $post_type->map_meta_cap ) {
 			$caps[] = $post_type->cap->$cap;
@@ -90,16 +105,26 @@ function map_meta_cap( $cap, $user_id ) {
 	case 'edit_post':
 	case 'edit_page':
 		$post = get_post( $args[0] );
-		if ( empty( $post ) ) {
+		if ( ! $post ) {
 			$caps[] = 'do_not_allow';
 			break;
 		}
 
 		if ( 'revision' == $post->post_type ) {
 			$post = get_post( $post->post_parent );
+			if ( ! $post ) {
+				$caps[] = 'do_not_allow';
+				break;
+			}
 		}
 
 		$post_type = get_post_type_object( $post->post_type );
+		if ( ! $post_type ) {
+			/* translators: 1: post type, 2: capability name */
+			_doing_it_wrong( __FUNCTION__, sprintf( __( 'The post type %1$s is not registered, so it may not be reliable to check the capability "%2$s" against a post of that type.' ), $post->post_type, $cap ), '4.4.0' );
+			$caps[] = 'edit_others_posts';
+			break;
+		}
 
 		if ( ! $post_type->map_meta_cap ) {
 			$caps[] = $post_type->cap->$cap;
@@ -136,12 +161,26 @@ function map_meta_cap( $cap, $user_id ) {
 	case 'read_post':
 	case 'read_page':
 		$post = get_post( $args[0] );
+		if ( ! $post ) {
+			$caps[] = 'do_not_allow';
+			break;
+		}
 
 		if ( 'revision' == $post->post_type ) {
 			$post = get_post( $post->post_parent );
+			if ( ! $post ) {
+				$caps[] = 'do_not_allow';
+				break;
+			}
 		}
 
 		$post_type = get_post_type_object( $post->post_type );
+		if ( ! $post_type ) {
+			/* translators: 1: post type, 2: capability name */
+			_doing_it_wrong( __FUNCTION__, sprintf( __( 'The post type %1$s is not registered, so it may not be reliable to check the capability "%2$s" against a post of that type.' ), $post->post_type, $cap ), '4.4.0' );
+			$caps[] = 'edit_others_posts';
+			break;
+		}
 
 		if ( ! $post_type->map_meta_cap ) {
 			$caps[] = $post_type->cap->$cap;
@@ -167,7 +206,18 @@ function map_meta_cap( $cap, $user_id ) {
 		break;
 	case 'publish_post':
 		$post = get_post( $args[0] );
+		if ( ! $post ) {
+			$caps[] = 'do_not_allow';
+			break;
+		}
+
 		$post_type = get_post_type_object( $post->post_type );
+		if ( ! $post_type ) {
+			/* translators: 1: post type, 2: capability name */
+			_doing_it_wrong( __FUNCTION__, sprintf( __( 'The post type %1$s is not registered, so it may not be reliable to check the capability "%2$s" against a post of that type.' ), $post->post_type, $cap ), '4.4.0' );
+			$caps[] = 'edit_others_posts';
+			break;
+		}
 
 		$caps[] = $post_type->cap->publish_posts;
 		break;
@@ -175,6 +225,11 @@ function map_meta_cap( $cap, $user_id ) {
 	case 'delete_post_meta':
 	case 'add_post_meta':
 		$post = get_post( $args[0] );
+		if ( ! $post ) {
+			$caps[] = 'do_not_allow';
+			break;
+		}
+
 		$caps = map_meta_cap( 'edit_post', $user_id, $post->ID );
 
 		$meta_key = isset( $args[ 1 ] ) ? $args[ 1 ] : false;
@@ -204,8 +259,11 @@ function map_meta_cap( $cap, $user_id ) {
 		break;
 	case 'edit_comment':
 		$comment = get_comment( $args[0] );
-		if ( empty( $comment ) )
+		if ( ! $comment ) {
+			$caps[] = 'do_not_allow';
 			break;
+		}
+
 		$post = get_post( $comment->comment_post_ID );
 
 		/*
@@ -471,6 +529,9 @@ function get_role( $role ) {
  * @return WP_Role|null WP_Role object if role is added, null if already exists.
  */
 function add_role( $role, $display_name, $capabilities = array() ) {
+	if ( empty( $role ) ) {
+		return;
+	}
 	return wp_roles()->add_role( $role, $display_name, $capabilities );
 }
 

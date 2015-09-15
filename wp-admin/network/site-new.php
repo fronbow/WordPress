@@ -33,7 +33,7 @@ get_current_screen()->set_help_sidebar(
 	'<p>' . __('<a href="https://wordpress.org/support/forum/multisite/" target="_blank">Support Forums</a>') . '</p>'
 );
 
-if ( isset($_REQUEST['action']) && 'add-site' == $_REQUEST['action'] ) {
+if ( wp_validate_action( 'add-site' ) ) {
 	check_admin_referer( 'add-blog', '_wpnonce_add-blog' );
 
 	if ( ! is_array( $_POST['blog'] ) )
@@ -47,7 +47,7 @@ if ( isset($_REQUEST['action']) && 'add-site' == $_REQUEST['action'] ) {
 	// If not a subdomain install, make sure the domain isn't a reserved word
 	if ( ! is_subdomain_install() ) {
 		/** This filter is documented in wp-includes/ms-functions.php */
-		$subdirectory_reserved_names = apply_filters( 'subdirectory_reserved_names', array( 'page', 'comments', 'blog', 'files', 'feed' ) );
+		$subdirectory_reserved_names = apply_filters( 'subdirectory_reserved_names', array( 'page', 'comments', 'blog', 'files', 'feed', 'wp-admin', 'wp-content', 'wp-includes' ) );
 		if ( in_array( $domain, $subdirectory_reserved_names ) )
 			wp_die( sprintf( __('The following words are reserved for use by WordPress functions and cannot be used as blog names: <code>%s</code>' ), implode( '</code>, <code>', $subdirectory_reserved_names ) ) );
 	}
@@ -94,7 +94,7 @@ if ( isset($_REQUEST['action']) && 'add-site' == $_REQUEST['action'] ) {
 		if ( false === $user_id )
 			wp_die( __( 'There was an error creating the user.' ) );
 		else
-			wp_new_user_notification( $user_id, 'both' );
+			wp_new_user_notification( $user_id, null, 'both' );
 	}
 
 	$wpdb->hide_errors();

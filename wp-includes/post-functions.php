@@ -835,10 +835,11 @@ function get_post_type( $post = null ) {
 function get_post_type_object( $post_type ) {
 	global $wp_post_types;
 
-	if ( empty($wp_post_types[$post_type]) )
+	if ( ! is_scalar( $post_type ) || empty( $wp_post_types[ $post_type ] ) ) {
 		return null;
+	}
 
-	return $wp_post_types[$post_type];
+	return $wp_post_types[ $post_type ];
 }
 
 /**
@@ -1071,12 +1072,15 @@ function register_post_type( $post_type, $args = array() ) {
 		add_post_type_support( $post_type, array( 'title', 'editor' ) );
 	}
 
-	if ( false !== $args->query_var && ! empty( $wp ) ) {
+	if ( false !== $args->query_var ) {
 		if ( true === $args->query_var )
 			$args->query_var = $post_type;
 		else
 			$args->query_var = sanitize_title_with_dashes( $args->query_var );
-		$wp->add_query_var( $args->query_var );
+
+		if ( $wp && is_post_type_viewable( $args ) ) {
+			$wp->add_query_var( $args->query_var );
+		}
 	}
 
 	if ( false !== $args->rewrite && ( is_admin() || '' != get_option( 'permalink_structure' ) ) ) {
@@ -1392,6 +1396,8 @@ function _get_custom_object_labels( $object, $nohier_vs_hier_defaults ) {
 		$defaults[$key] = $object->hierarchical ? $value[1] : $value[0];
 	}
 	$labels = array_merge( $defaults, $object->labels );
+	$object->labels = (object) $object->labels;
+
 	return (object) $labels;
 }
 
@@ -1814,7 +1820,7 @@ function sanitize_post( $post, $context = 'display' ) {
 		foreach ( array_keys(get_object_vars($post)) as $field )
 			$post->$field = sanitize_post_field($field, $post->$field, $post->ID, $context);
 		$post->filter = $context;
-	} else {
+	} elseif ( is_array( $post ) ) {
 		// Check if post already filtered for this context.
 		if ( isset($post['filter']) && $context == $post['filter'] )
 			return $post;
@@ -1835,15 +1841,16 @@ function sanitize_post( $post, $context = 'display' ) {
  * are treated like 'display' when calling filters.
  *
  * @since 2.3.0
+ * @since 4.4.0 Like `sanitize_post()`, `$context` defaults to 'display'.
  *
  * @param string $field   The Post Object field name.
  * @param mixed  $value   The Post Object value.
  * @param int    $post_id Post ID.
- * @param string $context How to sanitize post fields. Looks for 'raw', 'edit',
- *                        'db', 'display', 'attribute' and 'js'.
+ * @param string $context Optional. How to sanitize post fields. Looks for 'raw', 'edit',
+ *                        'db', 'display', 'attribute' and 'js'. Default 'display'.
  * @return mixed Sanitized value.
  */
-function sanitize_post_field($field, $value, $post_id, $context) {
+function sanitize_post_field( $field, $value, $post_id, $context = 'display' ) {
 	$int_fields = array('ID', 'post_parent', 'menu_order');
 	if ( in_array($field, $int_fields) )
 		$value = (int) $value;
@@ -2077,7 +2084,7 @@ function wp_count_posts( $type = 'post', $perm = '' ) {
 
 	$counts = wp_cache_get( $cache_key, 'counts' );
 	if ( false !== $counts ) {
-		/** This filter is documented in wp-includes/post.php */
+		/** This filter is documented in wp-includes/post-functions.php */
 		return apply_filters( 'wp_count_posts', $counts, $type, $perm );
 	}
 
@@ -2317,6 +2324,20 @@ function wp_delete_post( $postid = 0, $force_delete = false ) {
 		return wp_delete_attachment( $postid, $force_delete );
 
 	/**
+	 * Filter whether a post deletion should take place.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param bool    $delete       Whether to go forward with deletion.
+	 * @param WP_Post $post         Post object.
+	 * @param bool    $force_delete Whether to bypass the trash.
+	 */
+	$check = apply_filters( 'pre_delete_post', null, $post, $force_delete );
+	if ( null !== $check ) {
+		return $check;
+	}
+
+	/**
 	 * Fires before a post is deleted, at the start of wp_delete_post().
 	 *
 	 * @since 3.2.0
@@ -2352,9 +2373,14 @@ function wp_delete_post( $postid = 0, $force_delete = false ) {
 	// Point all attachments to this post up one level.
 	$wpdb->update( $wpdb->posts, $parent_data, $parent_where + array( 'post_type' => 'attachment' ) );
 
+	wp_defer_comment_counting( true );
+
 	$comment_ids = $wpdb->get_col( $wpdb->prepare( "SELECT comment_ID FROM $wpdb->comments WHERE comment_post_ID = %d", $postid ));
-	foreach ( $comment_ids as $comment_id )
+	foreach ( $comment_ids as $comment_id ) {
 		wp_delete_comment( $comment_id, true );
+	}
+
+	wp_defer_comment_counting( false );
 
 	$post_meta_ids = $wpdb->get_col( $wpdb->prepare( "SELECT meta_id FROM $wpdb->postmeta WHERE post_id = %d ", $postid ));
 	foreach ( $post_meta_ids as $mid )
@@ -3027,7 +3053,7 @@ function wp_insert_post( $postarr, $wp_error = false ) {
 
 	// These variables are needed by compact() later.
 	$post_content_filtered = $postarr['post_content_filtered'];
-	$post_author = empty( $postarr['post_author'] ) ? $user_id : $postarr['post_author'];
+	$post_author = isset( $postarr['post_author'] ) ? $postarr['post_author'] : $user_id;
 	$ping_status = empty( $postarr['ping_status'] ) ? get_default_comment_status( $post_type, 'pingback' ) : $postarr['ping_status'];
 	$to_ping = isset( $postarr['to_ping'] ) ? sanitize_trackback_urls( $postarr['to_ping'] ) : '';
 	$pinged = isset( $postarr['pinged'] ) ? $postarr['pinged'] : '';
@@ -3391,16 +3417,16 @@ function wp_publish_post( $post ) {
 	$post->post_status = 'publish';
 	wp_transition_post_status( 'publish', $old_status, $post );
 
-	/** This action is documented in wp-includes/post.php */
+	/** This action is documented in wp-includes/post-functions.php */
 	do_action( 'edit_post', $post->ID, $post );
 
-	/** This action is documented in wp-includes/post.php */
+	/** This action is documented in wp-includes/post-functions.php */
 	do_action( "save_post_{$post->post_type}", $post->ID, $post, true );
 
-	/** This action is documented in wp-includes/post.php */
+	/** This action is documented in wp-includes/post-functions.php */
 	do_action( 'save_post', $post->ID, $post, true );
 
-	/** This action is documented in wp-includes/post.php */
+	/** This action is documented in wp-includes/post-functions.php */
 	do_action( 'wp_insert_post', $post->ID, $post, true );
 }
 
@@ -4196,7 +4222,10 @@ function get_page_uri( $page ) {
 	$uri = $page->post_name;
 
 	foreach ( $page->ancestors as $parent ) {
-		$uri = get_post( $parent )->post_name . '/' . $uri;
+		$parent = get_post( $parent );
+		if ( 'publish' === $parent->post_status ) {
+			$uri = $parent->post_name . '/' . $uri;
+		}
 	}
 
 	return $uri;
@@ -4297,7 +4326,7 @@ function get_pages( $args = array() ) {
 	if ( $cache = wp_cache_get( $cache_key, 'posts' ) ) {
 		// Convert to WP_Post instances.
 		$pages = array_map( 'get_post', $cache );
-		/** This filter is documented in wp-includes/post.php */
+		/** This filter is documented in wp-includes/post-functions.php */
 		$pages = apply_filters( 'get_pages', $pages, $r );
 		return $pages;
 	}
@@ -4439,7 +4468,7 @@ function get_pages( $args = array() ) {
 	$pages = $wpdb->get_results($query);
 
 	if ( empty($pages) ) {
-		/** This filter is documented in wp-includes/post.php */
+		/** This filter is documented in wp-includes/post-functions.php */
 		$pages = apply_filters( 'get_pages', array(), $r );
 		return $pages;
 	}
@@ -4616,21 +4645,26 @@ function wp_delete_attachment( $post_id, $force_delete = false ) {
 	// Delete all for any posts.
 	delete_metadata( 'post', null, '_thumbnail_id', $post_id, true );
 
+	wp_defer_comment_counting( true );
+
 	$comment_ids = $wpdb->get_col( $wpdb->prepare( "SELECT comment_ID FROM $wpdb->comments WHERE comment_post_ID = %d", $post_id ));
-	foreach ( $comment_ids as $comment_id )
+	foreach ( $comment_ids as $comment_id ) {
 		wp_delete_comment( $comment_id, true );
+	}
+
+	wp_defer_comment_counting( false );
 
 	$post_meta_ids = $wpdb->get_col( $wpdb->prepare( "SELECT meta_id FROM $wpdb->postmeta WHERE post_id = %d ", $post_id ));
 	foreach ( $post_meta_ids as $mid )
 		delete_metadata_by_mid( 'post', $mid );
 
-	/** This action is documented in wp-includes/post.php */
+	/** This action is documented in wp-includes/post-functions.php */
 	do_action( 'delete_post', $post_id );
 	$result = $wpdb->delete( $wpdb->posts, array( 'ID' => $post_id ) );
 	if ( ! $result ) {
 		return false;
 	}
-	/** This action is documented in wp-includes/post.php */
+	/** This action is documented in wp-includes/post-functions.php */
 	do_action( 'deleted_post', $post_id );
 
 	$uploadpath = wp_upload_dir();
@@ -4943,7 +4977,8 @@ function wp_mime_type_icon( $mime = 0 ) {
 			$mime = (int) $mime;
 			if ( $post = get_post( $mime ) ) {
 				$post_id = (int) $post->ID;
-				$ext = preg_replace('/^.+?\.([^.]+)$/', '$1', $post->guid);
+				$file = get_attached_file( $post_id );
+				$ext = preg_replace('/^.+?\.([^.]+)$/', '$1', $file);
 				if ( !empty($ext) ) {
 					$post_mimes[] = $ext;
 					if ( $ext_type = wp_ext2type( $ext ) )
@@ -5195,12 +5230,14 @@ function get_posts_by_author_sql( $post_type, $full = true, $post_author = null,
  * 'gmt' is when the last post was posted in GMT formatted date.
  *
  * @since 0.71
+ * @since 4.4.0 The `$post_type` argument was added.
  *
- * @param string $timezone The location to get the time. Accepts 'gmt', 'blog',
- *                         or 'server'. Default 'server'.
+ * @param string $timezone  Optional. The location to get the time. Accepts 'gmt', 'blog',
+ *                          or 'server'. Default 'server'.
+ * @param string $post_type Optional. The post type to check. Default 'any'.
  * @return string The date of the last post.
  */
-function get_lastpostdate( $timezone = 'server' ) {
+function get_lastpostdate( $timezone = 'server', $post_type = 'any' ) {
 	/**
 	 * Filter the date the last post was published.
 	 *
@@ -5210,7 +5247,7 @@ function get_lastpostdate( $timezone = 'server' ) {
 	 *                         'blog', or 'server'.
 	 * @param string $timezone Location to use for getting the post published date.
 	 */
-	return apply_filters( 'get_lastpostdate', _get_last_post_time( $timezone, 'date' ), $timezone );
+	return apply_filters( 'get_lastpostdate', _get_last_post_time( $timezone, 'date', $post_type ), $timezone );
 }
 
 /**
@@ -5221,20 +5258,23 @@ function get_lastpostdate( $timezone = 'server' ) {
  * 'gmt' is when the last post was modified in GMT time.
  *
  * @since 1.2.0
+ * @since 4.4.0 The `$post_type` argument was added.
  *
- * @param string $timezone Optional. The timezone for the timestamp. Uses the server's internal timezone.
- *                         Accepts 'server', 'blog', 'gmt'. or 'server'. 'server' uses the server's
- *                         internal timezone. 'blog' uses the `post_modified` field, which proxies
- *                         to the timezone set for the site. 'gmt' uses the `post_modified_gmt` field.
- *                         Default 'server'.
+ * @param string $timezone  Optional. The timezone for the timestamp. Uses the server's internal timezone.
+ *                          Accepts 'server', 'blog', 'gmt'. or 'server'. 'server' uses the server's
+ *                          internal timezone. 'blog' uses the `post_modified` field, which proxies
+ *                          to the timezone set for the site. 'gmt' uses the `post_modified_gmt` field.
+ *                          Default 'server'.
+ * @param string $post_type Optional. The post type to check. Default 'any'.
  * @return string The timestamp.
  */
-function get_lastpostmodified( $timezone = 'server' ) {
-	$lastpostmodified = _get_last_post_time( $timezone, 'modified' );
+function get_lastpostmodified( $timezone = 'server', $post_type = 'any' ) {
+	$lastpostmodified = _get_last_post_time( $timezone, 'modified', $post_type );
 
 	$lastpostdate = get_lastpostdate($timezone);
-	if ( $lastpostdate > $lastpostmodified )
+	if ( $lastpostdate > $lastpostmodified ) {
 		$lastpostmodified = $lastpostdate;
+	}
 
 	/**
 	 * Filter the date the last post was modified.
@@ -5252,33 +5292,41 @@ function get_lastpostmodified( $timezone = 'server' ) {
  * Get the timestamp of the last time any post was modified or published.
  *
  * @since 3.1.0
+ * @since 4.4.0 The `$post_type` argument was added.
  * @access private
  *
  * @global wpdb $wpdb
  *
- * @param string $timezone The timezone for the timestamp. See {@see get_lastpostmodified()}
- *                         for information on accepted values.
- * @param string $field    Post field to check. Accepts 'date' or 'modified'.
+ * @param string $timezone  The timezone for the timestamp. See {@see get_lastpostmodified()}
+ *                          for information on accepted values.
+ * @param string $field     Post field to check. Accepts 'date' or 'modified'.
+ * @param string $post_type Optional. The post type to check. Default 'any'.
  * @return string|false The timestamp.
  */
-function _get_last_post_time( $timezone, $field ) {
+function _get_last_post_time( $timezone, $field, $post_type = 'any' ) {
 	global $wpdb;
 
-	if ( !in_array( $field, array( 'date', 'modified' ) ) )
+	if ( ! in_array( $field, array( 'date', 'modified' ) ) ) {
 		return false;
+	}
 
 	$timezone = strtolower( $timezone );
 
 	$key = "lastpost{$field}:$timezone";
+	if ( 'any' !== $post_type ) {
+		$key .= ':' . sanitize_key( $post_type );
+	}
 
 	$date = wp_cache_get( $key, 'timeinfo' );
 
-	if ( !$date ) {
-		$add_seconds_server = date('Z');
-
-		$post_types = get_post_types( array( 'public' => true ) );
-		array_walk( $post_types, array( &$wpdb, 'escape_by_ref' ) );
-		$post_types = "'" . implode( "', '", $post_types ) . "'";
+	if ( ! $date ) {
+		if ( 'any' === $post_type ) {
+			$post_types = get_post_types( array( 'public' => true ) );
+			array_walk( $post_types, array( $wpdb, 'escape_by_ref' ) );
+			$post_types = "'" . implode( "', '", $post_types ) . "'";
+		} else {
+			$post_types = "'" . sanitize_key( $post_type ) . "'";
+		}
 
 		switch ( $timezone ) {
 			case 'gmt':
@@ -5288,12 +5336,14 @@ function _get_last_post_time( $timezone, $field ) {
 				$date = $wpdb->get_var("SELECT post_{$field} FROM $wpdb->posts WHERE post_status = 'publish' AND post_type IN ({$post_types}) ORDER BY post_{$field}_gmt DESC LIMIT 1");
 				break;
 			case 'server':
+				$add_seconds_server = date( 'Z' );
 				$date = $wpdb->get_var("SELECT DATE_ADD(post_{$field}_gmt, INTERVAL '$add_seconds_server' SECOND) FROM $wpdb->posts WHERE post_status = 'publish' AND post_type IN ({$post_types}) ORDER BY post_{$field}_gmt DESC LIMIT 1");
 				break;
 		}
 
-		if ( $date )
+		if ( $date ) {
 			wp_cache_set( $key, $date, 'timeinfo' );
+		}
 	}
 
 	return $date;
@@ -5516,6 +5566,7 @@ function _transition_post_status( $new_status, $old_status, $post ) {
 		foreach ( array( 'server', 'gmt', 'blog' ) as $timezone ) {
 			wp_cache_delete( "lastpostmodified:$timezone", 'timeinfo' );
 			wp_cache_delete( "lastpostdate:$timezone", 'timeinfo' );
+			wp_cache_delete( "lastpostdate:$timezone:{$post->post_type}", 'timeinfo' );
 		}
 	}
 

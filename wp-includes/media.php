@@ -706,7 +706,7 @@ function wp_get_attachment_image_src( $attachment_id, $size = 'thumbnail', $icon
 		$src = false;
 
 		if ( $icon && $src = wp_mime_type_icon( $attachment_id ) ) {
-			/** This filter is documented in wp-includes/post.php */
+			/** This filter is documented in wp-includes/post-functions.php */
 			$icon_dir = apply_filters( 'icon_dir', ABSPATH . WPINC . '/images/media' );
 
 			$src_file = $icon_dir . '/' . wp_basename( $src );
@@ -870,6 +870,8 @@ function img_caption_shortcode( $attr, $content = null ) {
 			$content = $matches[1];
 			$attr['caption'] = trim( $matches[2] );
 		}
+	} elseif ( strpos( $attr['caption'], '<' ) !== false ) {
+		$attr['caption'] = wp_kses( $attr['caption'], 'post' );
 	}
 
 	/**
@@ -1173,7 +1175,7 @@ function wp_underscore_playlist_templates() {
 	<img src="{{ data.thumb.src }}"/>
 	<# } #>
 	<div class="wp-playlist-caption">
-		<span class="wp-playlist-item-meta wp-playlist-item-title"><?php 
+		<span class="wp-playlist-item-meta wp-playlist-item-title"><?php
 			/* translators: playlist item title */
 			printf( _x( '&#8220;%s&#8221;', 'playlist item title' ), '{{ data.title }}' );
 		?></span>
@@ -2074,7 +2076,8 @@ function get_attachment_taxonomies( $attachment ) {
 	if ( ! is_object($attachment) )
 		return array();
 
-	$filename = basename($attachment->guid);
+	$file = get_attached_file( $attachment->ID );
+	$filename = basename( $file );
 
 	$objects = array('attachment');
 

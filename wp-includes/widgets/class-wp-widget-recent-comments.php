@@ -73,7 +73,7 @@ class WP_Widget_Recent_Comments extends WP_Widget {
 
 		$title = ( ! empty( $instance['title'] ) ) ? $instance['title'] : __( 'Recent Comments' );
 
-		/** This filter is documented in wp-includes/default-widgets.php */
+		/** This filter is documented in wp-includes/widgets/class-wp-widget-pages.php */
 		$title = apply_filters( 'widget_title', $title, $instance, $this->id_base );
 
 		$number = ( ! empty( $instance['number'] ) ) ? absint( $instance['number'] ) : 5;
@@ -110,8 +110,8 @@ class WP_Widget_Recent_Comments extends WP_Widget {
 				$output .= '<li class="recentcomments">';
 				/* translators: comments widget: 1: comment author, 2: post link */
 				$output .= sprintf( _x( '%1$s on %2$s', 'widgets' ),
-					'<span class="comment-author-link">' . get_comment_author_link( $comment->comment_ID ) . '</span>',
-					'<a href="' . esc_url( get_comment_link( $comment->comment_ID ) ) . '">' . get_the_title( $comment->comment_post_ID ) . '</a>'
+					'<span class="comment-author-link">' . get_comment_author_link( $comment ) . '</span>',
+					'<a href="' . esc_url( get_comment_link( $comment ) ) . '">' . get_the_title( $comment->comment_post_ID ) . '</a>'
 				);
 				$output .= '</li>';
 			}

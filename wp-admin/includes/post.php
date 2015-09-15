@@ -1318,9 +1318,8 @@ function get_sample_permalink_html( $id, $new_title = null, $new_slug = null ) {
 
 	if ( isset( $view_post ) ) {
 		if ( 'draft' == $post->post_status ) {
-			$preview_link = set_url_scheme( get_permalink( $post->ID ) );
-			/** This filter is documented in wp-admin/includes/meta-boxes.php */
-			$preview_link = apply_filters( 'preview_post_link', add_query_arg( 'preview', 'true', $preview_link ), $post );
+			$draft_link = set_url_scheme( get_permalink( $post->ID ) );
+			$preview_link = get_preview_post_link( $post, array(), $draft_link );
 			$return .= "<span id='view-post-btn'><a href='" . esc_url( $preview_link ) . "' class='button button-small' target='wp-preview-{$post->ID}'>$view_post</a></span>\n";
 		} else {
 			if ( 'publish' === $post->post_status ) {
@@ -1511,20 +1510,17 @@ function _admin_notice_post_locked() {
 	<?php
 
 	if ( $locked ) {
+		$query_args = array();
 		if ( get_post_type_object( $post->post_type )->public ) {
-			$preview_link = set_url_scheme( add_query_arg( 'preview', 'true', get_permalink( $post->ID ) ) );
-
 			if ( 'publish' == $post->post_status || $user->ID != $post->post_author ) {
 				// Latest content is in autosave
 				$nonce = wp_create_nonce( 'post_preview_' . $post->ID );
-				$preview_link = add_query_arg( array( 'preview_id' => $post->ID, 'preview_nonce' => $nonce ), $preview_link );
+				$query_args['preview_id'] = $post->ID;
+				$query_args['preview_nonce'] = $nonce;
 			}
-		} else {
-			$preview_link = '';
 		}
 
-		/** This filter is documented in wp-admin/includes/meta-boxes.php */
-		$preview_link = apply_filters( 'preview_post_link', $preview_link, $post );
+		$preview_link = get_preview_post_link( $post->ID, $query_args );
 
 		/**
 		 * Filter whether to allow the post lock to be overridden.
@@ -1585,7 +1581,7 @@ function _admin_notice_post_locked() {
 			<div class="post-locked-avatar"></div>
 			<p class="wp-tab-first" tabindex="0">
 			<span class="currently-editing"></span><br />
-			<span class="locked-saving hidden"><img src="<?php echo esc_url( admin_url( 'images/spinner-2x.gif' ) ); ?>" width="16" height="16" /> <?php _e('Saving revision...'); ?></span>
+			<span class="locked-saving hidden"><img src="<?php echo esc_url( admin_url( 'images/spinner-2x.gif' ) ); ?>" width="16" height="16" /> <?php _e('Saving revision&hellip;'); ?></span>
 			<span class="locked-saved hidden"><?php _e('Your latest changes were saved as a revision.'); ?></span>
 			</p>
 			<?php
@@ -1710,7 +1706,7 @@ function post_preview() {
 	if ( is_wp_error( $saved_post_id ) )
 		wp_die( $saved_post_id->get_error_message() );
 
-	$query_args = array( 'preview' => 'true' );
+	$query_args = array();
 
 	if ( $is_autosave && $saved_post_id ) {
 		$query_args['preview_id'] = $post->ID;
@@ -1720,10 +1716,7 @@ function post_preview() {
 			$query_args['post_format'] = empty( $_POST['post_format'] ) ? 'standard' : sanitize_key( $_POST['post_format'] );
 	}
 
-	$url = add_query_arg( $query_args, get_permalink( $post->ID ) );
-
-	/** This filter is documented in wp-admin/includes/meta-boxes.php */
-	return apply_filters( 'preview_post_link', $url, $post );
+	return get_preview_post_link( $post, $query_args );
 }
 
 /**
@@ -1768,4 +1761,53 @@ function wp_autosave( $post_data ) {
 		// Non drafts or other users drafts are not overwritten. The autosave is stored in a special post revision for each user.
 		return wp_create_post_autosave( wp_slash( $post_data ) );
 	}
+}
+
+/**
+ * Redirect to previous page.
+ *
+ * @param int $post_id Optional. Post ID.
+ */
+function redirect_post($post_id = '') {
+	if ( isset($_POST['save']) || isset($_POST['publish']) ) {
+		$status = get_post_status( $post_id );
+
+		if ( isset( $_POST['publish'] ) ) {
+			switch ( $status ) {
+				case 'pending':
+					$message = 8;
+					break;
+				case 'future':
+					$message = 9;
+					break;
+				default:
+					$message = 6;
+			}
+		} else {
+			$message = 'draft' == $status ? 10 : 1;
+		}
+
+		$location = add_query_arg( 'message', $message, get_edit_post_link( $post_id, 'url' ) );
+	} elseif ( isset($_POST['addmeta']) && $_POST['addmeta'] ) {
+		$location = add_query_arg( 'message', 2, wp_get_referer() );
+		$location = explode('#', $location);
+		$location = $location[0] . '#postcustom';
+	} elseif ( isset($_POST['deletemeta']) && $_POST['deletemeta'] ) {
+		$location = add_query_arg( 'message', 3, wp_get_referer() );
+		$location = explode('#', $location);
+		$location = $location[0] . '#postcustom';
+	} else {
+		$location = add_query_arg( 'message', 4, get_edit_post_link( $post_id, 'url' ) );
+	}
+
+	/**
+	 * Filter the post redirect destination URL.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param string $location The destination URL.
+	 * @param int    $post_id  The post ID.
+	 */
+	wp_redirect( apply_filters( 'redirect_post_location', $location, $post_id ) );
+	exit;
 }

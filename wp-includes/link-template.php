@@ -1159,6 +1159,46 @@ function get_post_type_archive_feed_link( $post_type, $feed = '' ) {
 }
 
 /**
+ * Retrieve URL used for the post preview.
+ *
+ * Get the preview post URL. Allows additional query args to be appended.
+ *
+ * @since 4.4.0
+ *
+ * @param int|WP_Post $post         Optional. Post ID or `WP_Post` object. Defaults to global post.
+ * @param array       $query_args   Optional. Array of additional query args to be appended to the link.
+ * @param string      $preview_link Optional. Base preview link to be used if it should differ from the post permalink.
+ * @return string URL used for the post preview.
+ */
+function get_preview_post_link( $post = null, $query_args = array(), $preview_link = '' ) {
+	$post = get_post( $post );
+	if ( ! $post ) {
+		return;
+	}
+
+	$post_type_object = get_post_type_object( $post->post_type );
+	if ( is_post_type_viewable( $post_type_object ) ) {
+		if ( ! $preview_link ) {
+			$preview_link = get_permalink( $post );
+		}
+
+		$query_args['preview'] = 'true';
+		$preview_link = add_query_arg( $query_args, $preview_link );
+	}
+
+	/**
+	 * Filter the URL used for a post preview.
+	 *
+	 * @since 2.0.5
+	 * @since 4.4.0 $post parameter was added.
+	 *
+	 * @param string  $preview_link URL used for the post preview.
+	 * @param WP_Post $post         Post object.
+	 */
+	return apply_filters( 'preview_post_link', $preview_link, $post );
+}
+
+/**
  * Retrieve edit posts link for post.
  *
  * Can be used within the WordPress loop or outside of it. Can be used with
@@ -1188,6 +1228,10 @@ function get_edit_post_link( $id = 0, $context = 'display' ) {
 	if ( !current_user_can( 'edit_post', $post->ID ) )
 		return;
 
+	if ( ! in_array( $post->post_type, get_post_types( array( 'show_ui' => true ) ) ) ) {
+		return;
+	}
+
 	/**
 	 * Filter the post edit link.
 	 *
@@ -1205,13 +1249,15 @@ function get_edit_post_link( $id = 0, $context = 'display' ) {
  * Display edit post link for post.
  *
  * @since 1.0.0
+ * @since 4.4.0 The `$class` argument was added.
  *
  * @param string $text   Optional. Anchor text.
  * @param string $before Optional. Display before edit link.
  * @param string $after  Optional. Display after edit link.
  * @param int    $id     Optional. Post ID.
+ * @param string $class  Optional. Add custom class to link.
  */
-function edit_post_link( $text = null, $before = '', $after = '', $id = 0 ) {
+function edit_post_link( $text = null, $before = '', $after = '', $id = 0, $class = 'post-edit-link' ) {
 	if ( ! $post = get_post( $id ) ) {
 		return;
 	}
@@ -1224,7 +1270,7 @@ function edit_post_link( $text = null, $before = '', $after = '', $id = 0 ) {
 		$text = __( 'Edit This' );
 	}
 
-	$link = '<a class="post-edit-link" href="' . $url . '">' . $text . '</a>';
+	$link = '<a class="' . esc_attr( $class ) . '" href="' . $url . '">' . $text . '</a>';
 
 	/**
 	 * Filter the post edit link anchor tag.
@@ -1285,7 +1331,7 @@ function get_delete_post_link( $id = 0, $deprecated = '', $force_delete = false 
  *
  * @since 2.3.0
  *
- * @param int $comment_id Optional. Comment ID.
+ * @param int|WP_Comment $comment_id Optional. Comment ID or WP_Comment object.
  * @return string|void The edit comment link URL for the given comment.
  */
 function get_edit_comment_link( $comment_id = 0 ) {
@@ -1311,14 +1357,12 @@ function get_edit_comment_link( $comment_id = 0 ) {
  *
  * @since 1.0.0
  *
- * @global object $comment
- *
  * @param string $text   Optional. Anchor text.
  * @param string $before Optional. Display before edit link.
  * @param string $after  Optional. Display after edit link.
  */
 function edit_comment_link( $text = null, $before = '', $after = '' ) {
-	global $comment;
+	$comment = get_comment();
 
 	if ( ! current_user_can( 'edit_comment', $comment->comment_ID ) ) {
 		return;
@@ -1328,7 +1372,7 @@ function edit_comment_link( $text = null, $before = '', $after = '' ) {
 		$text = __( 'Edit This' );
 	}
 
-	$link = '<a class="comment-edit-link" href="' . get_edit_comment_link( $comment->comment_ID ) . '">' . $text . '</a>';
+	$link = '<a class="comment-edit-link" href="' . get_edit_comment_link( $comment ) . '">' . $text . '</a>';
 
 	/**
 	 * Filter the comment edit link anchor tag.
@@ -1494,9 +1538,6 @@ function get_adjacent_post( $in_same_term = false, $excluded_terms = '', $previo
 	$where = '';
 
 	if ( $in_same_term || ! empty( $excluded_terms ) ) {
-		$join = " INNER JOIN $wpdb->term_relationships AS tr ON p.ID = tr.object_id INNER JOIN $wpdb->term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id";
-		$where = $wpdb->prepare( "AND tt.taxonomy = %s", $taxonomy );
-
 		if ( ! empty( $excluded_terms ) && ! is_array( $excluded_terms ) ) {
 			// back-compat, $excluded_terms used to be $excluded_terms with IDs separated by " and "
 			if ( false !== strpos( $excluded_terms, ' and ' ) ) {
@@ -1510,6 +1551,9 @@ function get_adjacent_post( $in_same_term = false, $excluded_terms = '', $previo
 		}
 
 		if ( $in_same_term ) {
+			$join .= " INNER JOIN $wpdb->term_relationships AS tr ON p.ID = tr.object_id INNER JOIN $wpdb->term_taxonomy tt ON tr.term_taxonomy_id = tt.term_taxonomy_id";
+			$where .= $wpdb->prepare( "AND tt.taxonomy = %s", $taxonomy );
+
 			if ( ! is_object_in_taxonomy( $post->post_type, $taxonomy ) )
 				return '';
 			$term_array = wp_get_object_terms( $post->ID, $taxonomy, array( 'fields' => 'ids' ) );
@@ -1570,14 +1614,15 @@ function get_adjacent_post( $in_same_term = false, $excluded_terms = '', $previo
 	 * of adjacency, 'next' or 'previous'.
 	 *
 	 * @since 2.5.0
-	 * @since 4.4.0 Added the `$taxonomy` parameter.
+	 * @since 4.4.0 Added the `$taxonomy` and `$post` parameters.
 	 *
-	 * @param string $join           The JOIN clause in the SQL.
-	 * @param bool   $in_same_term   Whether post should be in a same taxonomy term.
-	 * @param array  $excluded_terms Array of excluded term IDs.
-	 * @param string $taxonomy       Taxonomy. Used to identify the term used when `$in_same_term` is true.
+	 * @param string  $join           The JOIN clause in the SQL.
+	 * @param bool    $in_same_term   Whether post should be in a same taxonomy term.
+	 * @param array   $excluded_terms Array of excluded term IDs.
+	 * @param string  $taxonomy       Taxonomy. Used to identify the term used when `$in_same_term` is true.
+	 * @param WP_Post $post           WP_Post object.
 	 */
-	$join = apply_filters( "get_{$adjacent}_post_join", $join, $in_same_term, $excluded_terms, $taxonomy );
+	$join = apply_filters( "get_{$adjacent}_post_join", $join, $in_same_term, $excluded_terms, $taxonomy, $post );
 
 	/**
 	 * Filter the WHERE clause in the SQL for an adjacent post query.
@@ -1586,14 +1631,15 @@ function get_adjacent_post( $in_same_term = false, $excluded_terms = '', $previo
 	 * of adjacency, 'next' or 'previous'.
 	 *
 	 * @since 2.5.0
-	 * @since 4.4.0 Added the `$taxonomy` parameter.
+	 * @since 4.4.0 Added the `$taxonomy` and `$post` parameters.
 	 *
 	 * @param string $where          The `WHERE` clause in the SQL.
 	 * @param bool   $in_same_term   Whether post should be in a same taxonomy term.
 	 * @param array  $excluded_terms Array of excluded term IDs.
 	 * @param string $taxonomy       Taxonomy. Used to identify the term used when `$in_same_term` is true.
+	 * @param WP_Post $post           WP_Post object.
 	 */
-	$where = apply_filters( "get_{$adjacent}_post_where", $wpdb->prepare( "WHERE p.post_date $op %s AND p.post_type = %s $where", $current_post_date, $post->post_type ), $in_same_term, $excluded_terms, $taxonomy );
+	$where = apply_filters( "get_{$adjacent}_post_where", $wpdb->prepare( "WHERE p.post_date $op %s AND p.post_type = %s $where", $current_post_date, $post->post_type ), $in_same_term, $excluded_terms, $taxonomy, $post );
 
 	/**
 	 * Filter the ORDER BY clause in the SQL for an adjacent post query.
@@ -1602,10 +1648,12 @@ function get_adjacent_post( $in_same_term = false, $excluded_terms = '', $previo
 	 * of adjacency, 'next' or 'previous'.
 	 *
 	 * @since 2.5.0
+	 * @since 4.4.0 Added the `$post` parameter.
 	 *
 	 * @param string $order_by The `ORDER BY` clause in the SQL.
+	 * @param WP_Post $post    WP_Post object.
 	 */
-	$sort  = apply_filters( "get_{$adjacent}_post_sort", "ORDER BY p.post_date $order LIMIT 1" );
+	$sort  = apply_filters( "get_{$adjacent}_post_sort", "ORDER BY p.post_date $order LIMIT 1", $post );
 
 	$query = "SELECT p.ID FROM $wpdb->posts AS p $join $where $sort";
 	$query_key = 'adjacent_post_' . md5( $query );
@@ -3599,6 +3647,10 @@ function get_avatar_data( $id_or_email, $args = null ) {
 
 	$email_hash = '';
 	$user = $email = false;
+
+	if ( is_object( $id_or_email ) && isset( $id_or_email->comment_ID ) ) {
+		$id_or_email = get_comment( $id_or_email );
+	}
 
 	// Process the user identifier.
 	if ( is_numeric( $id_or_email ) ) {

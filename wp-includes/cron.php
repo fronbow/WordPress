@@ -161,6 +161,7 @@ function wp_reschedule_event( $timestamp, $recurrence, $hook, $args = array() ) 
  * Although not passed to a callback function, these arguments are used
  * to uniquely identify the scheduled event, so they should be the same
  * as those used when originally scheduling the event.
+ * @return false|void False when an event is not unscheduled.
  */
 function wp_unschedule_event( $timestamp, $hook, $args = array() ) {
 	// Make sure timestamp is a positive integer
@@ -316,7 +317,7 @@ function spawn_cron( $gmt_time = 0 ) {
 		'args' => array(
 			'timeout'   => 0.01,
 			'blocking'  => false,
-			/** This filter is documented in wp-includes/class-http.php */
+			/** This filter is documented in wp-includes/class-wp-http-streams.php */
 			'sslverify' => apply_filters( 'https_local_ssl_verify', false )
 		)
 	) );

@@ -7,8 +7,11 @@
  * @subpackage User
  *
  * @property string $nickname
+ * @property string $description
  * @property string $user_description
+ * @property string $first_name
  * @property string $user_firstname
+ * @property string $last_name
  * @property string $user_lastname
  * @property string $user_login
  * @property string $user_pass
@@ -162,17 +165,23 @@ class WP_User {
 	 * Return only the main user fields
 	 *
 	 * @since 3.3.0
+	 * @since 4.4.0 Added 'ID' as an alias of 'id' for the `$field` parameter.
 	 *
 	 * @static
 	 *
 	 * @global wpdb $wpdb
 	 *
-	 * @param string $field The field to query against: 'id', 'slug', 'email' or 'login'
+	 * @param string $field The field to query against: 'id', 'ID', 'slug', 'email' or 'login'.
 	 * @param string|int $value The field value
 	 * @return object|false Raw user object
 	 */
 	public static function get_data_by( $field, $value ) {
 		global $wpdb;
+
+		// 'ID' is an alias of 'id'.
+		if ( 'ID' === $field ) {
+			$field = 'id';
+		}
 
 		if ( 'id' == $field ) {
 			// Make sure the value is numeric to avoid casting objects, for example,
@@ -436,6 +445,10 @@ class WP_User {
 	 * @param string $role Role name.
 	 */
 	public function add_role( $role ) {
+		if ( empty( $role ) ) {
+			return;
+		}
+
 		$this->caps[$role] = true;
 		update_user_meta( $this->ID, $this->cap_key, $this->caps );
 		$this->get_role_caps();
